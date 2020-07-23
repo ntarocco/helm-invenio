@@ -249,6 +249,72 @@ spec:
             memory: 200Mi
           limits:
             memory: 1Gi
+---
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  name: worker-beat
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: worker-beat
+    spec:
+      containers:
+      - name: worker-beat
+        image: {{ .Values.worker.image }}
+        command: [
+          "/bin/bash",
+          "-c",
+          "celery beat -A {{ .Values.worker.app }} -l {{ .Values.worker.log_level }}"
+        ]
+        envFrom:
+          - configMapRef:
+              name: invenio-config
+        env:
+          - name: TZ
+            value: "Europe/Zurich"
+          - name: INVENIO_BROKER_URL
+            valueFrom:
+              secretKeyRef:
+                name: mq-secrets
+                key: CELERY_BROKER_URL
+          - name: INVENIO_CELERY_BROKER_URL
+            valueFrom:
+              secretKeyRef:
+                name: mq-secrets
+                key: CELERY_BROKER_URL
+          - name: INVENIO_SQLALCHEMY_DATABASE_URI
+            valueFrom:
+              secretKeyRef:
+                name: db-secrets
+                key: SQLALCHEMY_DB_URI
+          - name: INVENIO_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: invenio-secrets
+                key: INVENIO_SECRET_KEY
+          {{ if not .Values.elasticsearch.inside_cluster }}
+          - name: INVENIO_SEARCH_ELASTIC_HOSTS
+            valueFrom:
+              secretKeyRef:
+                name: elasticsearch-secrets
+                key: INVENIO_SEARCH_ELASTIC_HOSTS
+          {{ end }}
+        livenessProbe:
+          exec:
+            command:
+              - /bin/bash
+              - -c
+              - "celery inspect ping -d celery@$(hostname) -A {{ .Values.worker.app }}"
+          initialDelaySeconds: 15
+          timeoutSeconds: 10
+        resources:
+          requests:
+            memory: 200Mi
+          limits:
+            memory: 1Gi
 {{- if .Values.web.horizontal_pod_autoscaler -}}
 ---
 apiVersion: autoscaling/v1
