@@ -261,14 +261,20 @@ spec:
       labels:
         app: worker-beat
     spec:
+      volumes:
+        - name: var-run-celery
+          emptyDir: {}
       containers:
       - name: worker-beat
         image: {{ .Values.worker.image }}
         command: [
           "/bin/bash",
           "-c",
-          "celery beat -A {{ .Values.worker.app }} -l {{ .Values.worker.log_level }}"
+          "celery beat -A {{ .Values.worker.app }} -l {{ .Values.worker.log_level }}  -s {{ .Values.worker.celery_schedule }} --pidfile {{ .Values.worker.celery_pidfile }}"
         ]
+        volumeMounts:
+          - name: var-run-celery
+            mountPath: {{ .Values.worker.run_mount_path }}
         envFrom:
           - configMapRef:
               name: invenio-config
@@ -302,14 +308,6 @@ spec:
                 name: elasticsearch-secrets
                 key: INVENIO_SEARCH_ELASTIC_HOSTS
           {{ end }}
-        livenessProbe:
-          exec:
-            command:
-              - /bin/bash
-              - -c
-              - "celery inspect ping -d celery@$(hostname) -A {{ .Values.worker.app }}"
-          initialDelaySeconds: 15
-          timeoutSeconds: 10
         resources:
           requests:
             memory: 200Mi
